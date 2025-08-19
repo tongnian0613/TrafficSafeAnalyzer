@@ -27,13 +27,10 @@
 
 2. 创建虚拟环境（推荐）：
    ```bash
-   # Windows
-   python -m venv venv
-   venv\Scripts\activate
-   
-   # Linux/macOS
-   python -m venv venv
-   source venv/bin/activate
+conda create -n trafficsa python=3.9 -y
+conda activate trafficsa
+pip install -r requirements.txt
+streamlit run app.py
    ```
 
 3. 安装依赖：
@@ -143,3 +140,6 @@ streamlit run app.py
 ## 许可证
 
 MIT License - 详见 LICENSE 文件。
+
+[![GitHub license](https://img.shields.io/github/license/tongnian0613/repo)](https://github.com/tongnian0613/TrafficSafeAnalyzer/LICENSE)
+[![Build Status](https://img.shields.io/travis/username/repo)](https://travis-ci.org/tongnian0613/repo)
