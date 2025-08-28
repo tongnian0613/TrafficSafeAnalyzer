@@ -20,18 +20,20 @@
 ### 安装
 
 1. 克隆仓库：
-   ```bash
-   git clone https://github.com/tongnian0613/TrafficSafeAnalyzer.git
-   cd TrafficSafeAnalyzer
-   ```
+
+```bash
+git clone https://github.com/tongnian0613/TrafficSafeAnalyzer.git
+cd TrafficSafeAnalyzer
+```
 
 2. 创建虚拟环境（推荐）：
-   ```bash
-conda create -n trafficsa python=3.9 -y
+
+```bash
+conda create -n trafficsa python=3.12 -y
 conda activate trafficsa
 pip install -r requirements.txt
 streamlit run app.py
-   ```
+```
 
 3. 安装依赖：
 
@@ -78,6 +80,7 @@ pytz>=2021.3
 openpyxl>=3.0.9
 xlrd>=2.0.1
 cryptography>=3.4.7
+openai>=2.0.0
 ```
 
 ## 配置参数
