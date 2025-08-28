@@ -1,3 +1,4 @@
+
 import os
 from datetime import datetime, timedelta
 import json
@@ -30,6 +31,13 @@ try:
     HAS_AUTOREFRESH = True
 except Exception:
     HAS_AUTOREFRESH = False
+
+# Add import for OpenAI API
+try:
+    from openai import OpenAI
+    HAS_OPENAI = True
+except Exception:
+    HAS_OPENAI = False
 
 
 # =======================
@@ -579,6 +587,12 @@ def run_streamlit_app():
     elif auto and not HAS_AUTOREFRESH:
         st.sidebar.info("未安装 `streamlit-autorefresh`，请使用上方“重新运行”按钮或关闭再开启此开关。")
 
+    # Add OpenAI API key input in sidebar
+    st.sidebar.markdown("---")
+    st.sidebar.subheader("GPT API 配置")
+    openai_api_key = st.sidebar.text_input("GPT API Key", value='sk-dQhKOOG48iVEfgJfAb14458dA4474fB09aBbE8153d4aB3Fc', type="password", help="用于GPT分析结果的API密钥")
+    open_ai_base_url = st.sidebar.text_input("GPT Base Url", value='https://az.gptplus5.com/v1', type='default')
+
     # Initialize session state to store processed data
     if 'processed_data' not in st.session_state:
         st.session_state['processed_data'] = {
@@ -686,9 +700,9 @@ def run_streamlit_app():
         with meta_col2:
             st.caption(f"🕒 最近刷新：{last_refresh.strftime('%Y-%m-%d %H:%M:%S')}")
 
-        # Tabs (unchanged from original)
-        tab_dash, tab_pred, tab7, tab3, tab4, tab5, tab6 = st.tabs(
-            ["🏠 总览", "📈 预测模型", "📊 模型评估", "⚠️ 异常检测", "📝 策略评估", "⚖️ 策略对比", "🧪 情景模拟"]
+        # Tabs (add new tab for GPT analysis)
+        tab_dash, tab_pred, tab_eval, tab_anom, tab_strat, tab_comp, tab_sim, tab_gpt = st.tabs(
+            ["🏠 总览", "📈 预测模型", "📊 模型评估", "⚠️ 异常检测", "📝 策略评估", "⚖️ 策略对比", "🧪 情景模拟", "🔍 GPT 分析"]
         )
 
         # --- Tab 1: 总览页
@@ -781,8 +795,32 @@ def run_streamlit_app():
             else:
                 st.info("请设置预测参数并点击“应用预测参数”按钮。")
 
-        # --- Tab 3: 异常检测
-        with tab3:
+        # --- Tab 3: 模型评估
+        with tab_eval:
+            st.subheader("模型预测效果对比")
+            with st.form(key="model_eval_form"):
+                horizon_sel = st.slider("评估窗口（天）", 7, 60, 30, step=1)
+                submit_eval = st.form_submit_button("应用评估参数")
+
+            if submit_eval:
+                try:
+                    df_metrics = evaluate_models(base['accident_count'], horizon=horizon_sel)
+                    st.dataframe(df_metrics, use_container_width=True)
+                    best_model = df_metrics['RMSE'].idxmin()
+                    st.success(f"过去 {horizon_sel} 天中，RMSE 最低的模型是：**{best_model}**")
+                    st.download_button(
+                        "下载评估结果 CSV",
+                        data=df_metrics.to_csv().encode('utf-8-sig'),
+                        file_name="model_evaluation.csv",
+                        mime="text/csv"
+                    )
+                except ValueError as err:
+                    st.warning(str(err))
+            else:
+                st.info("请设置评估窗口并点击“应用评估参数”按钮。")
+
+        # --- Tab 4: 异常检测
+        with tab_anom:
             anomalies, anomaly_fig = detect_anomalies(base['accident_count'])
             st.plotly_chart(anomaly_fig, use_container_width=True)
             st.write(f"检测到异常点：{len(anomalies)} 个")
@@ -790,8 +828,8 @@ def run_streamlit_app():
                             data=anomalies.to_series().to_csv(index=False).encode('utf-8-sig'),
                             file_name="anomalies.csv", mime="text/csv")
 
-        # --- Tab 4: 综合策略评估
-        with tab4:
+        # --- Tab 5: 策略评估
+        with tab_strat:
             st.info(f"📌 检测到的策略类型：{', '.join(all_strategy_types) or '（数据中没有策略）'}")
             if all_strategy_types:
                 results, recommendation = generate_output_and_recommendations(base, all_strategy_types,
@@ -808,9 +846,8 @@ def run_streamlit_app():
             else:
                 st.warning("数据中没有检测到策略。")
 
-
-        # --- Tab 5: 策略对比
-        with tab5:
+        # --- Tab 6: 策略对比
+        with tab_comp:
             def strategy_metrics(strategy):
                 mask = base['strategy_type'].apply(lambda x: strategy in x)
                 if not mask.any():
@@ -877,8 +914,8 @@ def run_streamlit_app():
             else:
                 st.warning("没有策略可供对比。")
 
-        # --- Tab 6: 情景模拟
-        with tab6:
+        # --- Tab 7: 情景模拟
+        with tab_sim:
             st.subheader("情景模拟")
             st.write("选择一个日期与策略，模拟“在该日期上线该策略”的影响：")
             with st.form(key="simulation_form"):
@@ -914,29 +951,61 @@ def run_streamlit_app():
             else:
                 st.info("请设置模拟参数并点击“应用模拟参数”按钮。")
 
-        # --- Tab 7: 模型评估
-        with tab7:
-            st.subheader("模型预测效果对比")
-            with st.form(key="model_eval_form"):
-                horizon_sel = st.slider("评估窗口（天）", 7, 60, 30, step=1)
-                submit_eval = st.form_submit_button("应用评估参数")
-
-            if submit_eval:
-                try:
-                    df_metrics = evaluate_models(base['accident_count'], horizon=horizon_sel)
-                    st.dataframe(df_metrics, use_container_width=True)
-                    best_model = df_metrics['RMSE'].idxmin()
-                    st.success(f"过去 {horizon_sel} 天中，RMSE 最低的模型是：**{best_model}**")
-                    st.download_button(
-                        "下载评估结果 CSV",
-                        data=df_metrics.to_csv().encode('utf-8-sig'),
-                        file_name="model_evaluation.csv",
-                        mime="text/csv"
-                    )
-                except ValueError as err:
-                    st.warning(str(err))
+        # --- New Tab 8: GPT 分析
+        with tab_gpt:
+            from openai import OpenAI
+            st.subheader("GPT 数据分析与改进建议")
+            # open_ai_key = f"sk-dQhKOOG48iVEfgJfAb14458dA4474fB09aBbE8153d4aB3Fc"
+            if not HAS_OPENAI:
+                st.warning("未安装 `openai` 库。请安装后重试。")
+            elif not openai_api_key:
+                st.info("请在左侧边栏输入 OpenAI API Key 以启用 GPT 分析。")
             else:
-                st.info("请设置评估窗口并点击“应用评估参数”按钮。")
+                if all_strategy_types:
+                    # Generate results if not already
+                    results, recommendation = generate_output_and_recommendations(base, all_strategy_types,
+                                                                                  region=region_sel if region_sel != '全市' else '全市')
+                    df_res = pd.DataFrame(results).T
+                    kpi_json = json.dumps(kpi, ensure_ascii=False, indent=2)
+                    results_json = df_res.to_json(orient="records", force_ascii=False)
+                    recommendation_text = recommendation
+
+                    # Prepare data to send
+                    data_to_analyze = {
+                        "kpis": kpi_json,
+                        "strategy_results": results_json,
+                        "recommendation": recommendation_text
+                    }
+                    data_str = json.dumps(data_to_analyze, ensure_ascii=False)
+
+                    prompt = str(f"""
+                    请分析以下交通安全分析结果，包括KPI指标、策略评估结果和推荐。
+                    提供数据结果的详细分析，以及改进思路和建议。
+                    数据：{str(data_str)}
+                    """)
+                    #st.text_area(prompt)
+                    if st.button("上传数据至 GPT 并获取分析"):
+                        try:
+                            client = OpenAI(
+                                    base_url=open_ai_base_url,
+                                    # sk-xxx替换为自己的key
+                                    api_key=openai_api_key
+                            )
+                            response = client.chat.completions.create(
+                                model="gpt-4o",
+                                messages=[
+                                    {"role": "system", "content": "You are a helpful assistant that analyzes traffic safety data."},
+                                    {"role": "user", "content": prompt}
+                                ],
+                                stream=False
+                            )
+                            gpt_response = response.choices[0].message.content 
+                            st.markdown("### GPT 分析结果与改进思路")
+                            st.markdown(gpt_response, unsafe_allow_html=True)
+                        except Exception as e:
+                            st.error(f"调用 OpenAI API 失败：{str(e)}")
+                else:
+                    st.warning("没有策略数据可供分析。")
 
                 # Update refresh time
                 st.session_state['last_refresh'] = datetime.now()

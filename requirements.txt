@@ -24,5 +24,8 @@ xlrd>=2.0.1      # For older Excel files
 # Security/authentication
 cryptography>=3.4.7
 
+# OpenAI
+openai
+
 # Note: hashlib and json are part of Python standard library
 # Note: os and datetime are part of Python standard library
