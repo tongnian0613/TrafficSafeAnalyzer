@@ -548,6 +548,177 @@ def evaluate_models(series: pd.Series,
             .round(3))
 
 
+import re
+from collections import Counter
+import jieba
+
+def parse_and_standardize_locations(accident_data):
+    """解析和标准化事故地点"""
+    df = accident_data.copy()
+    
+    # 提取关键路段信息
+    def extract_road_info(location):
+        if pd.isna(location):
+            return "未知路段"
+        
+        location = str(location)
+        
+        # 常见路段关键词
+        road_keywords = ['路', '道', '街', '巷', '路口', '交叉口', '大道', '公路']
+        area_keywords = ['新城', '临城', '千岛', '翁山', '海天', '海宇', '定沈', '滨海', '港岛', '体育', '长升', '金岛', '桃湾']
+        
+        # 提取包含关键词的路段
+        for keyword in road_keywords + area_keywords:
+            if keyword in location:
+                # 提取以该关键词为中心的路段名称
+                pattern = f'[^，。]*{keyword}[^，。]*'
+                matches = re.findall(pattern, location)
+                if matches:
+                    return matches[0].strip()
+        
+        return location
+
+    df['standardized_location'] = df['事故具体地点'].apply(extract_road_info)
+    
+    # 进一步清理和标准化
+    location_mapping = {
+        '新城千岛路': '千岛路',
+        '千岛路海天大道': '千岛路海天大道口',
+        '海天大道千岛路': '千岛路海天大道口',
+        '新城翁山路': '翁山路',
+        '翁山路金岛路': '翁山路金岛路口',
+        # 添加更多标准化映射...
+    }
+    
+    df['standardized_location'] = df['standardized_location'].replace(location_mapping)
+    
+    return df
+
+def analyze_location_frequency(accident_data, time_window='7D'):
+    """分析地点事故频次"""
+    df = parse_and_standardize_locations(accident_data)
+    
+    # 计算时间窗口
+    recent_cutoff = df['事故时间'].max() - pd.Timedelta(time_window)
+    
+    # 总体统计
+    overall_stats = df.groupby('standardized_location').agg({
+        '事故时间': ['count', 'max'],  # 事故总数和最近时间
+        '事故类型': lambda x: x.mode()[0] if len(x.mode()) > 0 else '财损',
+        '道路类型': lambda x: x.mode()[0] if len(x.mode()) > 0 else '城区道路',
+        '路口路段类型': lambda x: x.mode()[0] if len(x.mode()) > 0 else '普通路段'
+    })
+    
+    # 扁平化列名
+    overall_stats.columns = ['accident_count', 'last_accident', 'main_accident_type', 'main_road_type', 'main_intersection_type']
+    
+    # 近期统计
+    recent_accidents = df[df['事故时间'] >= recent_cutoff]
+    recent_stats = recent_accidents.groupby('standardized_location').agg({
+        '事故时间': 'count',
+        '事故类型': lambda x: x.mode()[0] if len(x.mode()) > 0 else '财损'
+    }).rename(columns={'事故时间': 'recent_count', '事故类型': 'recent_accident_type'})
+    
+    # 合并数据
+    result = overall_stats.merge(recent_stats, left_index=True, right_index=True, how='left').fillna(0)
+    result['recent_count'] = result['recent_count'].astype(int)
+    
+    # 计算趋势指标
+    result['trend_ratio'] = result['recent_count'] / result['accident_count']
+    result['days_since_last'] = (df['事故时间'].max() - result['last_accident']).dt.days
+    
+    return result.sort_values(['recent_count', 'accident_count'], ascending=False)
+
+
+def generate_intelligent_strategies(hotspot_df, time_period='本周'):
+    """生成智能针对性策略"""
+    strategies = []
+    
+    for location_name, location_data in hotspot_df.iterrows():
+        accident_count = location_data['accident_count']
+        recent_count = location_data['recent_count']
+        accident_type = location_data['main_accident_type']
+        road_type = location_data['main_road_type']
+        intersection_type = location_data['main_intersection_type']
+        trend_ratio = location_data['trend_ratio']
+        
+        # 基础信息
+        base_info = f"{time_period}对【{location_name}】"
+        data_support = f"（近期{int(recent_count)}起，累计{int(accident_count)}起，{accident_type}为主）"
+        
+        # 智能策略生成
+        strategy_parts = []
+        
+        # 基于事故类型
+        if accident_type == '财损':
+            strategy_parts.append("加强违法查处")
+            if '信号灯' in intersection_type:
+                strategy_parts.append("整治闯红灯、不按规定让行")
+            else:
+                strategy_parts.append("整治违法变道、超速行驶")
+        elif accident_type == '伤人':
+            strategy_parts.append("优化交通组织")
+            strategy_parts.append("增设安全设施")
+            if recent_count >= 2:
+                strategy_parts.append("开展专项整治")
+        
+        # 基于路口类型
+        if intersection_type == '信号灯路口':
+            strategy_parts.append("优化信号配时")
+        elif intersection_type == '非信号灯路口':
+            strategy_parts.append("完善让行标志")
+        elif intersection_type == '普通路段':
+            if trend_ratio > 0.3:  # 近期事故占比高
+                strategy_parts.append("加强巡逻管控")
+        
+        # 基于趋势
+        if trend_ratio > 0.5:
+            strategy_parts.append("列为重点管控路段")
+        if location_data['days_since_last'] <= 3:
+            strategy_parts.append("近期需重点关注")
+        
+        # 组合策略
+        if strategy_parts:
+            strategy = base_info + "，" + "，".join(strategy_parts) + data_support
+        else:
+            strategy = base_info + "分析事故成因，制定综合整治方案" + data_support
+        
+        strategies.append(strategy)
+    
+    return strategies
+
+def calculate_location_risk_score(hotspot_df):
+    """计算路口风险评分"""
+    df = hotspot_df.copy()
+    
+    # 事故频次得分 (0-40分)
+    df['frequency_score'] = (df['accident_count'] / df['accident_count'].max() * 40).clip(0, 40)
+    
+    # 近期趋势得分 (0-30分)
+    df['trend_score'] = (df['trend_ratio'] * 30).clip(0, 30)
+    
+    # 事故严重度得分 (0-20分)
+    severity_map = {'财损': 5, '伤人': 15, '亡人': 20}
+    df['severity_score'] = df['main_accident_type'].map(severity_map).fillna(5)
+    
+    # 时间紧迫度得分 (0-10分)
+    df['urgency_score'] = ((30 - df['days_since_last']) / 30 * 10).clip(0, 10)
+    
+    # 总分
+    df['risk_score'] = df['frequency_score'] + df['trend_score'] + df['severity_score'] + df['urgency_score']
+    
+    # 风险等级
+    conditions = [
+        df['risk_score'] >= 70,
+        df['risk_score'] >= 50,
+        df['risk_score'] >= 30
+    ]
+    choices = ['高风险', '中风险', '低风险']
+    df['risk_level'] = np.select(conditions, choices, default='一般风险')
+    
+    return df.sort_values('risk_score', ascending=False)
+
+
 # =======================
 # 4. App
 # =======================
@@ -701,10 +872,398 @@ def run_streamlit_app():
             st.caption(f"🕒 最近刷新：{last_refresh.strftime('%Y-%m-%d %H:%M:%S')}")
 
         # Tabs (add new tab for GPT analysis)
-        tab_dash, tab_pred, tab_eval, tab_anom, tab_strat, tab_comp, tab_sim, tab_gpt = st.tabs(
-            ["🏠 总览", "📈 预测模型", "📊 模型评估", "⚠️ 异常检测", "📝 策略评估", "⚖️ 策略对比", "🧪 情景模拟", "🔍 GPT 分析"]
+        tab_dash, tab_pred, tab_eval, tab_anom, tab_strat, tab_comp, tab_sim, tab_gpt, tab_hotspot = st.tabs(
+            ["🏠 总览", "📈 预测模型", "📊 模型评估", "⚠️ 异常检测", "📝 策略评估", "⚖️ 策略对比", "🧪 情景模拟", "🔍 GPT 分析", "📍 事故热点"]
         )
 
+
+        with tab_hotspot:
+            st.header("📍 事故多发路口分析")
+            st.markdown("独立分析事故数据，识别高风险路口并生成针对性策略")
+            
+            # 独立文件上传
+            st.subheader("📁 数据上传")
+            hotspot_file = st.file_uploader("上传事故数据文件", type=['xlsx'], key="hotspot_uploader")
+            
+            if hotspot_file is not None:
+                try:
+                    # 加载数据
+                    @st.cache_data(show_spinner=False)
+                    def load_hotspot_data(uploaded_file):
+                        """独立加载事故热点分析数据"""
+                        df = pd.read_excel(uploaded_file, sheet_name=None)
+                        accident_data = pd.concat(df.values(), ignore_index=True)
+                        
+                        # 数据清洗和预处理
+                        accident_data['事故时间'] = pd.to_datetime(accident_data['事故时间'])
+                        accident_data = accident_data.dropna(subset=['事故时间', '所在街道', '事故类型', '事故具体地点'])
+                        
+                        # 添加严重度评分
+                        severity_map = {'财损': 1, '伤人': 2, '亡人': 4}
+                        accident_data['severity'] = accident_data['事故类型'].map(severity_map).fillna(1)
+                        
+                        return accident_data
+                    
+                    with st.spinner("正在加载数据..."):
+                        accident_data = load_hotspot_data(hotspot_file)
+                    
+                    # 显示数据概览
+                    st.success(f"✅ 成功加载数据：{len(accident_data)} 条事故记录")
+                    
+                    col1, col2, col3 = st.columns(3)
+                    with col1:
+                        st.metric("数据时间范围", 
+                                f"{accident_data['事故时间'].min().strftime('%Y-%m-%d')} 至 {accident_data['事故时间'].max().strftime('%Y-%m-%d')}")
+                    with col2:
+                        st.metric("事故类型分布", 
+                                f"财损: {len(accident_data[accident_data['事故类型']=='财损'])}起")
+                    with col3:
+                        st.metric("涉及区域", 
+                                f"{accident_data['所在街道'].nunique()}个街道")
+                    
+                    # 地点标准化函数（独立版本）
+                    def standardize_hotspot_locations(df):
+                        """标准化事故地点"""
+                        df = df.copy()
+                        
+                        def extract_road_info(location):
+                            if pd.isna(location):
+                                return "未知路段"
+                            
+                            location = str(location)
+                            
+                            # 常见路段关键词
+                            road_keywords = ['路', '道', '街', '巷', '路口', '交叉口', '大道', '公路', '口']
+                            area_keywords = ['新城', '临城', '千岛', '翁山', '海天', '海宇', '定沈', '滨海', '港岛', '体育', '长升', '金岛', '桃湾']
+                            
+                            # 提取包含关键词的路段
+                            for keyword in road_keywords + area_keywords:
+                                if keyword in location:
+                                    # 简化地点名称
+                                    words = location.split()
+                                    for word in words:
+                                        if keyword in word:
+                                            return word
+                                    return location
+                            
+                            # 如果没找到关键词，返回原地点（截断过长的）
+                            return location[:20] if len(location) > 20 else location
+                        
+                        df['standardized_location'] = df['事故具体地点'].apply(extract_road_info)
+                        
+                        # 手动标准化映射（根据实际数据调整）
+                        location_mapping = {
+                            '新城千岛路': '千岛路',
+                            '千岛路海天大道': '千岛路海天大道口',
+                            '海天大道千岛路': '千岛路海天大道口',
+                            '新城翁山路': '翁山路',
+                            '翁山路金岛路': '翁山路金岛路口',
+                            '海天大道临长路': '海天大道临长路口',
+                            '定沈路卫生医院门口': '定沈路医院段',
+                            '翁山路海城路西口': '翁山路海城路口',
+                            '海宇道路口': '海宇道',
+                            '海天大道路口': '海天大道',
+                            '定沈路交叉路口': '定沈路',
+                            '千岛路路口': '千岛路',
+                            '体育路路口': '体育路',
+                            '金岛路路口': '金岛路',
+                        }
+                        
+                        df['standardized_location'] = df['standardized_location'].replace(location_mapping)
+                        
+                        return df
+                    
+                    # 热点分析函数
+                    def analyze_hotspot_frequency(df, time_window='7D'):
+                        """分析地点事故频次"""
+                        df = standardize_hotspot_locations(df)
+                        
+                        # 计算时间窗口
+                        recent_cutoff = df['事故时间'].max() - pd.Timedelta(time_window)
+                        
+                        # 总体统计
+                        overall_stats = df.groupby('standardized_location').agg({
+                            '事故时间': ['count', 'max'],
+                            '事故类型': lambda x: x.mode()[0] if len(x.mode()) > 0 else '财损',
+                            '道路类型': lambda x: x.mode()[0] if len(x.mode()) > 0 else '城区道路',
+                            '路口路段类型': lambda x: x.mode()[0] if len(x.mode()) > 0 else '普通路段',
+                            'severity': 'sum'
+                        })
+                        
+                        # 扁平化列名
+                        overall_stats.columns = ['accident_count', 'last_accident', 'main_accident_type', 
+                                            'main_road_type', 'main_intersection_type', 'total_severity']
+                        
+                        # 近期统计
+                        recent_accidents = df[df['事故时间'] >= recent_cutoff]
+                        recent_stats = recent_accidents.groupby('standardized_location').agg({
+                            '事故时间': 'count',
+                            '事故类型': lambda x: x.mode()[0] if len(x.mode()) > 0 else '财损',
+                            'severity': 'sum'
+                        }).rename(columns={'事故时间': 'recent_count', '事故类型': 'recent_accident_type', 'severity': 'recent_severity'})
+                        
+                        # 合并数据
+                        result = overall_stats.merge(recent_stats, left_index=True, right_index=True, how='left').fillna(0)
+                        result['recent_count'] = result['recent_count'].astype(int)
+                        
+                        # 计算趋势指标
+                        result['trend_ratio'] = result['recent_count'] / result['accident_count']
+                        result['days_since_last'] = (df['事故时间'].max() - result['last_accident']).dt.days
+                        result['avg_severity'] = result['total_severity'] / result['accident_count']
+                        
+                        return result.sort_values(['recent_count', 'accident_count'], ascending=False)
+                    
+                    # 风险评分函数
+                    def calculate_hotspot_risk_score(hotspot_df):
+                        """计算路口风险评分"""
+                        df = hotspot_df.copy()
+                        
+                        # 事故频次得分 (0-40分)
+                        df['frequency_score'] = (df['accident_count'] / df['accident_count'].max() * 40).clip(0, 40)
+                        
+                        # 近期趋势得分 (0-30分)
+                        df['trend_score'] = (df['trend_ratio'] * 30).clip(0, 30)
+                        
+                        # 事故严重度得分 (0-20分)
+                        severity_map = {'财损': 5, '伤人': 15, '亡人': 20}
+                        df['severity_score'] = df['main_accident_type'].map(severity_map).fillna(5)
+                        
+                        # 时间紧迫度得分 (0-10分)
+                        df['urgency_score'] = ((30 - df['days_since_last']) / 30 * 10).clip(0, 10)
+                        
+                        # 总分
+                        df['risk_score'] = df['frequency_score'] + df['trend_score'] + df['severity_score'] + df['urgency_score']
+                        
+                        # 风险等级
+                        conditions = [
+                            df['risk_score'] >= 70,
+                            df['risk_score'] >= 50,
+                            df['risk_score'] >= 30
+                        ]
+                        choices = ['高风险', '中风险', '低风险']
+                        df['risk_level'] = np.select(conditions, choices, default='一般风险')
+                        
+                        return df.sort_values('risk_score', ascending=False)
+                    
+                    # 策略生成函数
+                    def generate_hotspot_strategies(hotspot_df, time_period='本周'):
+                        """生成热点针对性策略"""
+                        strategies = []
+                        
+                        for location_name, location_data in hotspot_df.iterrows():
+                            accident_count = location_data['accident_count']
+                            recent_count = location_data['recent_count']
+                            accident_type = location_data['main_accident_type']
+                            intersection_type = location_data['main_intersection_type']
+                            trend_ratio = location_data['trend_ratio']
+                            risk_level = location_data['risk_level']
+                            
+                            # 基础信息
+                            base_info = f"{time_period}对【{location_name}】"
+                            data_support = f"（近期{int(recent_count)}起，累计{int(accident_count)}起，{accident_type}为主）"
+                            
+                            # 智能策略生成
+                            strategy_parts = []
+                            
+                            # 基于路口类型和事故类型
+                            if '信号灯' in str(intersection_type):
+                                if accident_type == '财损':
+                                    strategy_parts.extend(["加强闯红灯查处", "优化信号配时", "整治不按规定让行"])
+                                else:
+                                    strategy_parts.extend(["完善人行过街设施", "加强非机动车管理", "设置警示标志"])
+                            elif '普通路段' in str(intersection_type):
+                                strategy_parts.extend(["加强巡逻管控", "整治违法停车", "设置限速标志"])
+                            else:
+                                strategy_parts.extend(["分析事故成因", "制定综合整治方案"])
+                            
+                            # 基于风险等级
+                            if risk_level == '高风险':
+                                strategy_parts.append("列为重点整治路段")
+                                strategy_parts.append("开展专项整治行动")
+                            elif risk_level == '中风险':
+                                strategy_parts.append("加强日常监管")
+                            
+                            # 基于趋势
+                            if trend_ratio > 0.4:
+                                strategy_parts.append("近期重点监控")
+                            
+                            # 组合策略
+                            if strategy_parts:
+                                strategy = base_info + "，" + "，".join(strategy_parts) + data_support
+                            else:
+                                strategy = base_info + "加强交通安全管理" + data_support
+                            
+                            strategies.append({
+                                'location': location_name,
+                                'strategy': strategy,
+                                'risk_level': risk_level,
+                                'accident_count': accident_count,
+                                'recent_count': recent_count
+                            })
+                        
+                        return strategies
+                    
+                    # 分析参数设置
+                    st.subheader("🔧 分析参数设置")
+                    col1, col2, col3 = st.columns(3)
+                    with col1:
+                        time_window = st.selectbox("统计时间窗口", ['7D', '15D', '30D'], index=0, key="hotspot_window")
+                    with col2:
+                        min_accidents = st.number_input("最小事故数", 1, 50, 3, key="hotspot_min_accidents")
+                    with col3:
+                        top_n = st.slider("显示热点数量", 3, 20, 8, key="hotspot_top_n")
+                    
+                    if st.button("🚀 开始热点分析", type="primary"):
+                        with st.spinner("正在分析事故热点分布..."):
+                            # 执行热点分析
+                            hotspots = analyze_hotspot_frequency(accident_data, time_window=time_window)
+                            
+                            # 过滤最小事故数
+                            hotspots = hotspots[hotspots['accident_count'] >= min_accidents]
+                            
+                            if len(hotspots) > 0:
+                                # 计算风险评分
+                                hotspots_with_risk = calculate_hotspot_risk_score(hotspots.head(top_n * 3))
+                                top_hotspots = hotspots_with_risk.head(top_n)
+                                
+                                # 显示热点排名
+                                st.subheader(f"📊 事故多发路口排名（前{top_n}个）")
+                                
+                                display_df = top_hotspots[[
+                                    'accident_count', 'recent_count', 'trend_ratio', 
+                                    'main_accident_type', 'main_intersection_type', 'risk_score', 'risk_level'
+                                ]].rename(columns={
+                                    'accident_count': '累计事故',
+                                    'recent_count': '近期事故',
+                                    'trend_ratio': '趋势比例',
+                                    'main_accident_type': '主要类型',
+                                    'main_intersection_type': '路口类型',
+                                    'risk_score': '风险评分',
+                                    'risk_level': '风险等级'
+                                })
+                                
+                                # 格式化显示
+                                styled_df = display_df.style.format({
+                                    '趋势比例': '{:.2f}',
+                                    '风险评分': '{:.1f}'
+                                }).background_gradient(subset=['风险评分'], cmap='Reds')
+                                
+                                st.dataframe(styled_df, use_container_width=True)
+                                
+                                # 生成策略建议
+                                strategies = generate_hotspot_strategies(top_hotspots, time_period='本周')
+                                
+                                st.subheader("🎯 针对性策略建议")
+                                
+                                for i, strategy_info in enumerate(strategies, 1):
+                                    strategy = strategy_info['strategy']
+                                    risk_level = strategy_info['risk_level']
+                                    
+                                    # 根据风险等级显示不同颜色
+                                    if risk_level == '高风险':
+                                        st.error(f"🚨 **{i}. {strategy}**")
+                                    elif risk_level == '中风险':
+                                        st.warning(f"⚠️ **{i}. {strategy}**")
+                                    else:
+                                        st.info(f"✅ **{i}. {strategy}**")
+                                
+                                # 可视化分析
+                                st.subheader("📈 数据分析可视化")
+                                
+                                col1, col2 = st.columns(2)
+                                
+                                with col1:
+                                    # 事故频次分布图
+                                    fig1 = px.bar(
+                                        top_hotspots.head(10),
+                                        x=top_hotspots.head(10).index,
+                                        y=['accident_count', 'recent_count'],
+                                        title="事故频次TOP10分布",
+                                        labels={'value': '事故数量', 'variable': '类型', 'index': '路口名称'},
+                                        barmode='group'
+                                    )
+                                    fig1.update_layout(xaxis_tickangle=-45)
+                                    st.plotly_chart(fig1, use_container_width=True)
+                                
+                                with col2:
+                                    # 风险等级分布
+                                    risk_dist = top_hotspots['risk_level'].value_counts()
+                                    fig2 = px.pie(
+                                        values=risk_dist.values,
+                                        names=risk_dist.index,
+                                        title="风险等级分布",
+                                        color_discrete_map={'高风险': 'red', '中风险': 'orange', '低风险': 'green'}
+                                    )
+                                    st.plotly_chart(fig2, use_container_width=True)
+                                
+                                # 详细数据下载
+                                st.subheader("💾 数据导出")
+                                
+                                col_dl1, col_dl2 = st.columns(2)
+                                
+                                with col_dl1:
+                                    # 下载热点数据
+                                    hotspot_csv = top_hotspots.to_csv().encode('utf-8-sig')
+                                    st.download_button(
+                                        "📥 下载热点数据CSV",
+                                        data=hotspot_csv,
+                                        file_name=f"accident_hotspots_{datetime.now().strftime('%Y%m%d')}.csv",
+                                        mime="text/csv"
+                                    )
+                                
+                                with col_dl2:
+                                    # 下载策略报告
+                                    report_data = {
+                                        "analysis_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                                        "time_window": time_window,
+                                        "data_source": hotspot_file.name,
+                                        "total_records": len(accident_data),
+                                        "analysis_parameters": {
+                                            "min_accidents": min_accidents,
+                                            "top_n": top_n
+                                        },
+                                        "top_hotspots": top_hotspots.to_dict('records'),
+                                        "recommended_strategies": strategies,
+                                        "summary": {
+                                            "high_risk_count": len(top_hotspots[top_hotspots['risk_level'] == '高风险']),
+                                            "medium_risk_count": len(top_hotspots[top_hotspots['risk_level'] == '中风险']),
+                                            "total_analyzed_locations": len(hotspots),
+                                            "most_dangerous_location": top_hotspots.index[0] if len(top_hotspots) > 0 else "无"
+                                        }
+                                    }
+                                    
+                                    st.download_button(
+                                        "📄 下载完整分析报告",
+                                        data=json.dumps(report_data, ensure_ascii=False, indent=2),
+                                        file_name=f"hotspot_analysis_report_{datetime.now().strftime('%Y%m%d_%H%M')}.json",
+                                        mime="application/json"
+                                    )
+                                
+                            else:
+                                st.warning("⚠️ 未找到符合条件的事故热点数据，请调整筛选参数")
+                    
+                    # 显示原始数据预览（可选）
+                    with st.expander("📋 查看原始数据预览"):
+                        st.dataframe(accident_data[['事故时间', '所在街道', '事故类型', '事故具体地点', '道路类型']].head(10), 
+                                use_container_width=True)
+                        
+                except Exception as e:
+                    st.error(f"❌ 数据加载失败：{str(e)}")
+                    st.info("请检查文件格式是否正确，确保包含'事故时间'、'事故类型'、'事故具体地点'等必要字段")
+            
+            else:
+                st.info("👆 请上传事故数据Excel文件开始分析")
+                st.markdown("""
+                ### 📝 支持的数据格式要求：
+                - **文件格式**: Excel (.xlsx)
+                - **必要字段**:
+                - `事故时间`: 事故发生时的时间
+                - `事故类型`: 财损/伤人/亡人
+                - `事故具体地点`: 详细的事故发生地点
+                - `所在街道`: 事故发生的街道区域
+                - `道路类型`: 城区道路/其他等
+                - `路口路段类型`: 信号灯路口/普通路段等
+                """)
         # --- Tab 1: 总览页
         with tab_dash:
             fig_line = go.Figure()
