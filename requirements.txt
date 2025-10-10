@@ -27,5 +27,8 @@ cryptography>=3.4.7
 # OpenAI
 openai
 
+# jieba for Chinese text segmentation
+jieba
+
 # Note: hashlib and json are part of Python standard library
 # Note: os and datetime are part of Python standard library
