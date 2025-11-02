@@ -5,3 +5,8 @@ run_metadata.json
 simulation.html
 .DS_Store
 overview_series.html
+tmp/
+__pycache__/
+*.py[cod]
+.venv/
+.streamlit/

@@ -8,6 +8,8 @@
 - 使用 ARIMA、KNN、GLM、SVR 等模型预测事故趋势
 - 检测异常事故点
 - 评估交通策略效果并提供推荐
+- 识别事故热点路口并生成风险分级与整治建议
+- 支持 GPT 分析生成自然语言洞察
 
 ## 安装步骤
 
@@ -29,7 +31,7 @@ cd TrafficSafeAnalyzer
 2. 创建虚拟环境（推荐）：
 
 ```bash
-conda create -n trafficsa python=3.12 -y
+conda create -n trafficsa python=3.8 -y
 conda activate trafficsa
 pip install -r requirements.txt
 streamlit run app.py
@@ -85,10 +87,19 @@ openai>=2.0.0
 
 ## 配置参数
 
-- **数据文件**：上传事故数据（`accident_file`）和策略数据（`strategy_file`），格式为 Excel
+- **数据文件**：上传事故数据（`accident_file`）和策略数据（`strategy_file`），格式为 Excel；事故热点分析会直接复用事故数据，无需额外上传。
 - **环境变量**（可选）：
   - `LOG_LEVEL=DEBUG`：启用详细日志
   - 示例：`export LOG_LEVEL=DEBUG`（Linux/macOS）或 `set LOG_LEVEL=DEBUG`（Windows）
+
+## 示例数据
+
+`sample/` 目录提供了脱敏示例数据，便于快速体验：
+
+- `sample/事故/*.xlsx`：按年份划分的事故记录
+- `sample/交通策略/*.xlsx`：策略发布记录
+
+使用前建议复制到临时位置再进行编辑。
 
 ## 输入输出格式
 
@@ -118,8 +129,11 @@ streamlit run app.py
 **问题**：数据加载失败  
 **解决**：确保 Excel 文件格式正确，检查列名是否匹配
 
-**问题**：`NameError: name 'strategy_metrics' is not defined`  
-**解决**：确保 `strategy_metrics` 函数定义在 `app.py` 中，且位于 `run_streamlit_app` 函数内
+**问题**：预测模型页面点击后图表未显示  
+**解决**：确认干预日期之前至少有 10 条历史记录，或缩短预测天数重新提交
+
+**问题**：热点分析提示“请上传事故数据”  
+**解决**：侧边栏上传事故数据后点击“应用数据与筛选”，热点模块会复用相同数据集
 
 ## 日志分析
 
