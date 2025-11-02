@@ -295,8 +295,8 @@ def run_streamlit_app():
     # Add OpenAI API key input in sidebar
     st.sidebar.markdown("---")
     st.sidebar.subheader("AI API 配置")
-    openai_api_key = st.sidebar.text_input("AI API Key", value='sk-sXY934yPqjh7YKKC08380b198fEb47308cDa09BeE23d9c8a', type="password", help="用于 AI 分析结果的 API 密钥")
-    open_ai_base_url = st.sidebar.text_input("AI Base Url", value='https://aihubmix.com/v1', type='default')
+    openai_api_key = st.sidebar.text_input("AI API Key", value='sk-959e0b065c774b1db6e30bf7589680f9', type="password", help="用于 AI 分析结果的 API 密钥")
+    open_ai_base_url = st.sidebar.text_input("AI Base Url", value='https://api.deepseek.com', type='default')
 
     # Process data only when Apply button is clicked
     if apply_button and accident_file and strategy_file:
@@ -488,7 +488,7 @@ def run_streamlit_app():
                                 accumulated_response: list[str] = []
                                 with st.spinner("AI 正在生成专业报告，请稍候…"):
                                     stream = client.chat.completions.create(
-                                        model="gpt-5-mini",
+                                        model="deepseek-chat",
                                         messages=[
                                             {
                                                 "role": "system",
