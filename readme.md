@@ -19,7 +19,7 @@
 - Git
 - 可选：Docker（用于容器化部署）
 
-### 安装
+### 安装（本地环境）
 
 1. 克隆仓库：
 
@@ -62,6 +62,28 @@ streamlit run app.py
       ```bash
       streamlit run app.py
       ```
+
+### 使用 Docker 运行
+
+项目根目录已经包含 `Dockerfile`，无需额外配置即可容器化运行：
+
+```bash
+# 构建镜像
+docker build -t trafficsafeanalyzer .
+
+# 以临时容器方式启动
+docker run --rm -p 8501:8501 trafficsafeanalyzer
+```
+
+运行后访问 `http://localhost:8501` 即可。若需加载主机上的数据文件，可通过挂载方式注入：
+
+```bash
+docker run --rm -p 8501:8501 \
+  -v "$(pwd)/sample:/app/sample" \
+  trafficsafeanalyzer
+```
+
+容器内默认启用了示例 AI 凭据与 Streamlit Headless 模式，如需调整可在 `docker run` 时追加环境变量（例如 `-e STREAMLIT_SERVER_PORT=8502`）。
 
 ## 依赖项
 

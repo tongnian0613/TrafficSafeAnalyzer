@@ -68,6 +68,25 @@ pip install streamlit-autorefresh openpyxl xlrd cryptography openai
 
 3. Open `http://localhost:8501` in your browser. The home page should load without import errors.
 
+## 5. Run with Docker (optional)
+
+If you prefer an isolated container build, use the included `Dockerfile`:
+
+```bash
+docker build -t trafficsafeanalyzer .
+docker run --rm -p 8501:8501 trafficsafeanalyzer
+```
+
+To work with local data, mount the host folder containing Excel files:
+
+```bash
+docker run --rm -p 8501:8501 \
+  -v "$(pwd)/sample:/app/sample" \
+  trafficsafeanalyzer
+```
+
+The container exposes Streamlit on port 8501 by default. Override configuration via environment variables when needed, for example `-e STREAMLIT_SERVER_PORT=8502`.
+
 ## Troubleshooting tips
 
 - **Missing package**: Re-run `pip install -r requirements.txt`.

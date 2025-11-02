@@ -4,7 +4,7 @@ TrafficSafeAnalyzer delivers accident analytics and decision support through a S
 
 ## Start the app
 
-1. Activate your virtual or conda environment.
+1. Activate your virtual or conda environment（或在容器中运行，见下）.
 2. From the project root, run:
 
    ```bash
@@ -12,6 +12,8 @@ TrafficSafeAnalyzer delivers accident analytics and decision support through a S
    ```
 
 3. Open `http://localhost:8501`. Keep the terminal running while you work in the browser.
+
+> 使用 Docker？运行 `docker build -t trafficsafeanalyzer .` 与 `docker run --rm -p 8501:8501 trafficsafeanalyzer` 后，同样访问 `http://localhost:8501`。
 
 ## Load input data
 
