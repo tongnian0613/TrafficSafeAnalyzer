@@ -294,9 +294,9 @@ def run_streamlit_app():
 
     # Add OpenAI API key input in sidebar
     st.sidebar.markdown("---")
-    st.sidebar.subheader("GPT API 配置")
-    openai_api_key = st.sidebar.text_input("GPT API Key", value='sk-sXY934yPqjh7YKKC08380b198fEb47308cDa09BeE23d9c8a', type="password", help="用于GPT分析结果的API密钥")
-    open_ai_base_url = st.sidebar.text_input("GPT Base Url", value='https://aihubmix.com/v1', type='default')
+    st.sidebar.subheader("AI API 配置")
+    openai_api_key = st.sidebar.text_input("AI API Key", value='sk-sXY934yPqjh7YKKC08380b198fEb47308cDa09BeE23d9c8a', type="password", help="用于 AI 分析结果的 API 密钥")
+    open_ai_base_url = st.sidebar.text_input("AI Base Url", value='https://aihubmix.com/v1', type='default')
 
     # Process data only when Apply button is clicked
     if apply_button and accident_file and strategy_file:
@@ -404,14 +404,14 @@ def run_streamlit_app():
 
         tab_labels = [
             "🏠 总览",
+            "📍 事故热点",
+            "🔍 AI 分析",
             "📈 预测模型",
             "📊 模型评估",
             "⚠️ 异常检测",
             "📝 策略评估",
             "⚖️ 策略对比",
             "🧪 情景模拟",
-            "🔍 GPT 分析",
-            "📍 事故热点",
         ]
         default_tab = st.session_state.get("active_tab", tab_labels[0])
         if default_tab not in tab_labels:
@@ -426,17 +426,94 @@ def run_streamlit_app():
         st.session_state["active_tab"] = selected_tab
 
 
-        if selected_tab == "📍 事故热点":
+        if selected_tab == "🏠 总览":
+            if render_overview is not None:
+                render_overview(base, region_sel, start_dt, end_dt, strat_filter)
+            else:
+                st.warning("概览模块未能加载，请检查 `ui_sections/overview.py`。")
+
+        elif selected_tab == "📍 事故热点":
             if render_hotspot is not None:
                 render_hotspot(accident_records, accident_source_name)
             else:
                 st.warning("事故热点模块未能加载，请检查 `ui_sections/hotspot.py`。")
 
-        elif selected_tab == "🏠 总览":
-            if render_overview is not None:
-                render_overview(base, region_sel, start_dt, end_dt, strat_filter)
+        elif selected_tab == "🔍 AI 分析":
+            from openai import OpenAI
+            st.subheader("AI 数据分析与改进建议")
+            if not HAS_OPENAI:
+                st.warning("未安装 `openai` 库。请安装后重试。")
+            elif not openai_api_key:
+                st.info("请在左侧边栏输入 OpenAI API Key 以启用 AI 分析。")
             else:
-                st.warning("概览模块未能加载，请检查 `ui_sections/overview.py`。")
+                if all_strategy_types:
+                    # Generate results if not already
+                    results, recommendation = generate_output_and_recommendations(base, all_strategy_types,
+                                                                                 region=region_sel if region_sel != '全市' else '全市')
+                    df_res = pd.DataFrame(results).T
+                    kpi_json = json.dumps(kpi, ensure_ascii=False, indent=2)
+                    results_json = df_res.to_json(orient="records", force_ascii=False)
+                    recommendation_text = recommendation
+
+                    # Prepare data to send
+                    data_to_analyze = {
+                        "kpis": kpi_json,
+                        "strategy_results": results_json,
+                        "recommendation": recommendation_text
+                    }
+                    data_str = json.dumps(data_to_analyze, ensure_ascii=False)
+
+                    prompt = (
+                        "你是一名资深交通安全数据分析顾问。请基于以下结构化数据输出一份专业报告，需包含：\n"
+                        "1. 核心指标洞察：按要点总结事故趋势、显著波动及可能原因。\n"
+                        "2. 策略绩效评估：对比主要策略的优势、短板与适用场景。\n"
+                        "3. 优化建议：为短期（0-3个月）、中期（3-12个月）与长期（12个月以上）分别给出2-3条可操作措施。\n"
+                        "请保持正式语气，引用关键数值支撑结论，并用清晰的小节或列表呈现。\n"
+                        f"数据摘要：{data_str}\n"
+                    )
+                    if st.button("上传数据至 AI 并获取分析"):
+                        if not openai_api_key.strip():
+                            st.info("请提供有效的 AI API Key。")
+                        elif not open_ai_base_url.strip():
+                            st.info("请提供可访问的 AI Base Url。")
+                        else:
+                            try:
+                                client = OpenAI(
+                                        base_url=open_ai_base_url,
+                                        # sk-xxx替换为自己的key
+                                        api_key=openai_api_key
+                                )
+                                st.markdown("### AI 分析结果与改进思路")
+                                placeholder = st.empty()
+                                accumulated_response: list[str] = []
+                                with st.spinner("AI 正在生成专业报告，请稍候…"):
+                                    stream = client.chat.completions.create(
+                                        model="gpt-5-mini",
+                                        messages=[
+                                            {
+                                                "role": "system",
+                                                "content": "You are a professional traffic safety analyst who writes concise, well-structured Chinese reports."
+                                            },
+                                            {"role": "user", "content": prompt},
+                                        ],
+                                        stream=True,
+                                    )
+                                    for chunk in stream:
+                                        delta = chunk.choices[0].delta if chunk.choices else None
+                                        piece = getattr(delta, "content", None) if delta else None
+                                        if piece:
+                                            accumulated_response.append(piece)
+                                            placeholder.markdown("".join(accumulated_response), unsafe_allow_html=True)
+                                final_text = "".join(accumulated_response)
+                                if not final_text:
+                                    placeholder.info("AI 未返回可用内容，请稍后重试或检查凭据配置。")
+                            except Exception as e:
+                                st.error(f"调用 OpenAI API 失败：{str(e)}")
+                else:
+                    st.warning("没有策略数据可供分析。")
+
+                # Update refresh time
+                st.session_state['last_refresh'] = datetime.now()
 
         elif selected_tab == "📈 预测模型":
             if render_forecast is not None:
@@ -651,67 +728,6 @@ def run_streamlit_app():
                                     file_name="simulation.html", mime="text/html")
             else:
                 st.info("请设置模拟参数并点击“应用模拟参数”按钮。")
-
-        # --- New Tab 8: GPT 分析
-        elif selected_tab == "🔍 GPT 分析":
-            from openai import OpenAI
-            st.subheader("GPT 数据分析与改进建议")
-            # open_ai_key = f"sk-dQhKOOG48iVEfgJfAb14458dA4474fB09aBbE8153d4aB3Fc"
-            if not HAS_OPENAI:
-                st.warning("未安装 `openai` 库。请安装后重试。")
-            elif not openai_api_key:
-                st.info("请在左侧边栏输入 OpenAI API Key 以启用 GPT 分析。")
-            else:
-                if all_strategy_types:
-                    # Generate results if not already
-                    results, recommendation = generate_output_and_recommendations(base, all_strategy_types,
-                                                                                  region=region_sel if region_sel != '全市' else '全市')
-                    df_res = pd.DataFrame(results).T
-                    kpi_json = json.dumps(kpi, ensure_ascii=False, indent=2)
-                    results_json = df_res.to_json(orient="records", force_ascii=False)
-                    recommendation_text = recommendation
-
-                    # Prepare data to send
-                    data_to_analyze = {
-                        "kpis": kpi_json,
-                        "strategy_results": results_json,
-                        "recommendation": recommendation_text
-                    }
-                    data_str = json.dumps(data_to_analyze, ensure_ascii=False)
-
-                    prompt = str(f"""
-                    请分析以下交通安全分析结果，包括KPI指标、策略评估结果和推荐。
-                    提供数据结果的详细分析，以及改进思路和建议。
-                    数据：{str(data_str)}
-                    """)
-                    if st.button("上传数据至 GPT 并获取分析"):
-                        if False: 
-                            st.info("请将 GPT Base Url 更新为实际可访问的接口地址。")
-                        else:
-                            try:
-                                client = OpenAI(
-                                        base_url=open_ai_base_url,
-                                        # sk-xxx替换为自己的key
-                                        api_key=openai_api_key
-                                )
-                                response = client.chat.completions.create(
-                                    model="gpt-5-mini",
-                                    messages=[
-                                        {"role": "system", "content": "You are a helpful assistant that analyzes traffic safety data."},
-                                        {"role": "user", "content": prompt}
-                                    ],
-                                    stream=False
-                                )
-                                gpt_response = response.choices[0].message.content 
-                                st.markdown("### GPT 分析结果与改进思路")
-                                st.markdown(gpt_response, unsafe_allow_html=True)
-                            except Exception as e:
-                                st.error(f"调用 OpenAI API 失败：{str(e)}")
-                else:
-                    st.warning("没有策略数据可供分析。")
-
-                # Update refresh time
-                st.session_state['last_refresh'] = datetime.now()
 
     else:
         st.info("请先在左侧上传事故数据与策略数据，并点击“应用数据与筛选”按钮。")

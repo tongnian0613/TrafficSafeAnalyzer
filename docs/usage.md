@@ -41,7 +41,7 @@ Use the sidebar form labelled “数据与筛选”.
 - **📝 策略评估 (Strategy evaluation)** — Aggregates metrics per strategy type, recommends the best option, writes `strategy_evaluation_results.csv`, and updates `recommendation.txt`.
 - **⚖️ 策略对比 (Strategy comparison)** — side-by-side metrics for selected strategies, useful for “what worked best last month” reviews.
 - **🧪 情景模拟 (Scenario simulation)** — apply intervention models (persistent/decay, lagged effects) to test potential roll-outs.
-- **🔍 GPT 分析** — enter your own OpenAI-compatible API key and base URL in the sidebar to generate narrative insights. Keys are read at runtime only.
+- **🔍 AI 分析** — 默认示例 API Key/Base URL 已预填，可直接体验；如需切换自有凭据，可在侧边栏更新后生成洞察（运行时读取，不会写入磁盘）。
 - **📍 事故热点 (Hotspot)** — reuse the already uploaded accident data to identify high-risk intersections and produce targeted mitigation ideas; no separate hotspot upload is required.
 
 Each tab remembers the active filters from the sidebar so results stay consistent.

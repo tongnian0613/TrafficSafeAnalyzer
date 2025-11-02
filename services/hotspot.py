@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Iterable
+from typing import Iterable, Optional
 
 import numpy as np
 import pandas as pd
@@ -211,11 +211,24 @@ def generate_hotspot_strategies(
     return strategies
 
 
-def serialise_datetime_columns(df: pd.DataFrame, columns: Iterable[str]) -> pd.DataFrame:
+def serialise_datetime_columns(df: pd.DataFrame, columns: Optional[Iterable[str]] = None) -> pd.DataFrame:
     result = df.copy()
+    if columns is None:
+        columns = result.columns
     for column in columns:
-        if column in result.columns and pd.api.types.is_datetime64_any_dtype(result[column]):
-            result[column] = result[column].dt.strftime("%Y-%m-%d %H:%M:%S")
+        if column not in result.columns:
+            continue
+        series = result[column]
+        if pd.api.types.is_datetime64_any_dtype(series):
+            result[column] = series.dt.strftime("%Y-%m-%d %H:%M:%S")
+        else:
+            has_timestamp = series.map(lambda value: isinstance(value, (datetime, pd.Timestamp))).any()
+            if has_timestamp:
+                result[column] = series.map(
+                    lambda value: value.strftime("%Y-%m-%d %H:%M:%S")
+                    if isinstance(value, (datetime, pd.Timestamp))
+                    else value
+                )
     return result
 
 
@@ -224,4 +237,3 @@ def _mode_fallback(series: pd.Series) -> str:
         return ""
     mode = series.mode()
     return str(mode.iloc[0]) if not mode.empty else str(series.iloc[0])
-

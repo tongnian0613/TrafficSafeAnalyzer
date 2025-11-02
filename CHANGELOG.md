@@ -3,7 +3,7 @@
 ## [1.1.0] - 2025-08-28
 
 ### Added
-- Integrated GPT-based analysis for comprehensive traffic safety insights
+- Integrated AI-based analysis for comprehensive traffic safety insights
 - Added automated report generation with AI-powered recommendations
 - Implemented natural language query processing for data exploration
 - Added export functionality for analysis reports (PDF/CSV formats)
@@ -22,7 +22,7 @@
 - Addressed memory leaks in large dataset processing
 
 ### Documentation
-- Updated README with new GPT analysis features and usage examples
+- Updated README with new AI analysis features and usage examples
 - Added API documentation for extended functionality
 - Included sample datasets and tutorial guides
 

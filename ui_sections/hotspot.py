@@ -154,10 +154,7 @@ def render_hotspot(accident_records, accident_source_name: str | None) -> None:
         )
 
     with download_cols[1]:
-        serializable = serialise_datetime_columns(
-            top_hotspots.reset_index(),
-            columns=[col for col in top_hotspots.columns if "time" in col or "date" in col],
-        )
+        serializable = serialise_datetime_columns(top_hotspots.reset_index())
         report_payload = {
             "analysis_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "time_window": time_window,
@@ -186,4 +183,3 @@ def render_hotspot(accident_records, accident_source_name: str | None) -> None:
         preview_cols = ["事故时间", "所在街道", "事故类型", "事故具体地点", "道路类型"]
         preview_df = hotspot_data[preview_cols].copy()
         st.dataframe(preview_df.head(10), use_container_width=True)
-
