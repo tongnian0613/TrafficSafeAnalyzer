@@ -245,9 +245,9 @@ ANOMALY_CONTAMINATION = 0.10  # 预期异常比例
 
 参见 [CHANGELOG.md](CHANGELOG.md)
 
-**当前版本**：v1.1.0
+**当前版本**：v1.3.0
 
-### v1.1.0 主要更新
+### v1.3.0 主要更新
 
 - 集成 DeepSeek AI 分析功能（流式输出）
 - 新增事故热点分析模块
