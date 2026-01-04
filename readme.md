@@ -1,25 +1,67 @@
 # TrafficSafeAnalyzer
 
-一个基于 Streamlit 的交通安全分析系统，支持事故数据分析、预测模型、异常检测和策略评估。
+基于 Streamlit 的交通安全分析系统，支持事故数据分析、多模型预测、异常检测、策略评估和 AI 智能分析。
 
-## 功能
+## 功能特性
 
-- 加载和清洗事故与策略数据（Excel 格式）
-- 使用 ARIMA、KNN、GLM、SVR 等模型预测事故趋势
-- 检测异常事故点
-- 评估交通策略效果并提供推荐
-- 识别事故热点路口并生成风险分级与整治建议
-- 支持 AI 分析生成自然语言洞察
+### 核心功能模块
+
+| 模块 | 功能说明 |
+|------|----------|
+| 总览 | 可视化事故趋势、KPI 指标展示（今日/本周事故数、预测偏差、策略覆盖率等） |
+| 事故热点 | 识别高发路口，生成风险分级与整治建议 |
+| AI 分析 | 基于 DeepSeek API 生成专业分析报告和改进建议 |
+| 预测模型 | 支持 ARIMA、KNN、GLM、SVR 等多模型预测对比 |
+| 模型评估 | 对比各模型预测效果（RMSE、MAE 等指标） |
+| 异常检测 | 基于 Isolation Forest 算法检测异常事故点 |
+| 策略评估 | 评估单一交通策略实施效果 |
+| 策略对比 | 多策略效果横向对比分析 |
+| 情景模拟 | 模拟策略上线对事故趋势的影响 |
+
+### 技术亮点
+
+- 支持实时自动刷新
+- 交互式 Plotly 图表
+- 多格式数据导出（CSV、HTML）
+- Docker 容器化部署
+- 中文分词支持（jieba）
+
+## 项目结构
+
+```
+TrafficSafeAnalyzer/
+├── app.py                 # 主应用入口
+├── services/              # 业务逻辑层
+│   ├── forecast.py        # 预测模型（ARIMA、KNN、GLM、SVR）
+│   ├── hotspot.py         # 热点分析
+│   ├── io.py              # 数据加载与清洗
+│   ├── metrics.py         # 模型评估指标
+│   └── strategy.py        # 策略评估
+├── ui_sections/           # UI 组件层
+│   ├── overview.py        # 总览页面
+│   ├── forecast.py        # 预测页面
+│   ├── model_eval.py      # 模型评估页面
+│   ├── strategy_eval.py   # 策略评估页面
+│   └── hotspot.py         # 热点分析页面
+├── config/
+│   └── settings.py        # 配置参数
+├── docs/                  # 文档
+│   ├── install.md         # 安装指南
+│   └── usage.md           # 使用说明
+├── Dockerfile             # Docker 配置
+├── requirements.txt       # Python 依赖
+└── environment.yml        # Conda 环境配置
+```
 
 ## 安装步骤
 
 ### 前提条件
 
-- Python 3.8+
+- Python 3.8+（推荐 3.12）
 - Git
 - 可选：Docker（用于容器化部署）
 
-### 安装（本地环境）
+### 方式一：本地安装
 
 1. 克隆仓库：
 
@@ -31,155 +73,213 @@ cd TrafficSafeAnalyzer
 2. 创建虚拟环境（推荐）：
 
 ```bash
-conda create -n trafficsa python=3.8 -y
+# 使用 conda
+conda create -n trafficsa python=3.12 -y
 conda activate trafficsa
-pip install -r requirements.txt
-streamlit run app.py
+
+# 或使用 venv
+python -m venv venv
+source venv/bin/activate  # Linux/macOS
+# venv\Scripts\activate   # Windows
 ```
 
 3. 安装依赖：
 
-   (1) 基本安装（必需依赖）
+```bash
+pip install -r requirements.txt
+```
 
-   ```bash
-   pip install streamlit pandas numpy matplotlib plotly scikit-learn statsmodels scipy
-   ```
+4. 运行应用：
 
-   (2) 完整安装（包含所有可选依赖）
+```bash
+streamlit run app.py
+```
 
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-   (3) 或者手动安装可选依赖
-
-   ```bash
-   pip install streamlit-autorefresh openpyxl xlrd cryptography
-   ```
-
-   (4) 运行应用：
-
-      ```bash
-      streamlit run app.py
-      ```
-
-### 使用 Docker 运行
-
-项目根目录已经包含 `Dockerfile`，无需额外配置即可容器化运行：
+### 方式二：Docker 部署
 
 ```bash
 # 构建镜像
 docker build -t trafficsafeanalyzer .
 
-# 以临时容器方式启动
+# 运行容器
 docker run --rm -p 8501:8501 trafficsafeanalyzer
 ```
 
-运行后访问 `http://localhost:8501` 即可。若需加载主机上的数据文件，可通过挂载方式注入：
+访问 `http://localhost:8501` 即可使用。
+
+如需挂载本地数据目录：
 
 ```bash
 docker run --rm -p 8501:8501 \
-  -v "$(pwd)/sample:/app/sample" \
+  -v "$(pwd)/data:/app/data" \
   trafficsafeanalyzer
 ```
 
-容器内默认启用了示例 AI 凭据与 Streamlit Headless 模式，如需调整可在 `docker run` 时追加环境变量（例如 `-e STREAMLIT_SERVER_PORT=8502`）。
+自定义端口：
+
+```bash
+docker run --rm -p 8080:8501 \
+  -e STREAMLIT_SERVER_PORT=8501 \
+  trafficsafeanalyzer
+```
 
 ## 依赖项
 
-列于 `requirements.txt`：
+### 核心依赖
 
-```txt
-streamlit>=1.20.0
-pandas>=1.3.0
-numpy>=1.21.0
-matplotlib>=3.4.0
-plotly>=5.0.0
-scikit-learn>=1.0.0
-statsmodels>=0.13.0
-scipy>=1.7.0
-streamlit-autorefresh>=0.1.5
-python-dateutil>=2.8.2
-pytz>=2021.3
-openpyxl>=3.0.9
-xlrd>=2.0.1
-cryptography>=3.4.7
-openai>=2.0.0
-```
+| 包名 | 版本要求 | 用途 |
+|------|----------|------|
+| streamlit | >=1.20.0 | Web 应用框架 |
+| pandas | >=1.3.0 | 数据处理 |
+| numpy | >=1.21.0 | 数值计算 |
+| matplotlib | >=3.4.0 | 静态图表 |
+| plotly | >=5.0.0 | 交互式图表 |
+| scikit-learn | >=1.0.0 | 机器学习模型 |
+| statsmodels | >=0.13.0 | 统计模型（ARIMA） |
+
+### 可选依赖
+
+| 包名 | 用途 |
+|------|------|
+| scipy | 统计检验（t-test、Mann-Whitney U） |
+| streamlit-autorefresh | 页面自动刷新 |
+| openpyxl / xlrd | Excel 文件读写 |
+| openai | AI 分析（兼容 DeepSeek API） |
+| jieba | 中文分词 |
+| cryptography | 安全加密 |
+
+## 使用说明
+
+### 数据格式要求
+
+**事故数据 Excel**：
+
+| 必需列 | 说明 |
+|--------|------|
+| 事故时间 | 事故发生时间 |
+| 所在街道 | 事故地点 |
+| 事故类型 | 事故分类 |
+
+可选列：`region`（区域）、严重程度等
+
+**策略数据 Excel**：
+
+| 必需列 | 说明 |
+|--------|------|
+| 发布时间 | 策略发布日期 |
+| 交通策略类型 | 策略分类 |
+
+### 基本操作流程
+
+1. 启动应用后，在左侧边栏上传事故数据和策略数据（Excel 格式）
+2. 设置全局筛选器：区域、时间范围、策略类型
+3. 点击"应用数据与筛选"按钮加载数据
+4. 在顶部标签页切换不同功能模块进行分析
+
+### AI 分析配置
+
+系统使用 DeepSeek API 进行 AI 智能分析：
+
+| 配置项 | 默认值 | 说明 |
+|--------|--------|------|
+| API Key | 预填示例密钥 | 可在侧边栏替换为自有密钥 |
+| Base URL | `https://api.deepseek.com` | DeepSeek API 地址 |
+
+AI 分析功能可生成：
+- 核心指标洞察
+- 策略绩效评估
+- 短期/中期/长期优化建议
+
+### 输出文件
+
+| 类型 | 文件名示例 | 说明 |
+|------|------------|------|
+| 预测结果 | `arima_forecast.csv` | ARIMA 模型预测数据 |
+| 模型评估 | `model_evaluation.csv` | 各模型指标对比 |
+| 异常检测 | `anomalies.csv` | 异常日期列表 |
+| 策略对比 | `strategy_compare.csv` | 策略效果对比表 |
+| 交互图表 | `simulation.html` | Plotly 图表导出 |
 
 ## 配置参数
 
-- **数据文件**：上传事故数据（`accident_file`）和策略数据（`strategy_file`），格式为 Excel；事故热点分析会直接复用事故数据，无需额外上传。
-- **环境变量**（可选）：
-  - `LOG_LEVEL=DEBUG`：启用详细日志
-  - 示例：`export LOG_LEVEL=DEBUG`（Linux/macOS）或 `set LOG_LEVEL=DEBUG`（Windows）
-- **AI 分析凭据**：应用内已预填可用的示例 API Key 与 Base URL，可直接体验；如需使用自有服务，可在侧边栏替换后即时生效。
+### 环境变量
 
-## 示例数据
+| 变量名 | 说明 | 默认值 |
+|--------|------|--------|
+| `LOG_LEVEL` | 日志级别 | INFO |
+| `STREAMLIT_SERVER_PORT` | 服务端口 | 8501 |
+| `STREAMLIT_SERVER_HEADLESS` | 无头模式 | true（Docker 中） |
 
-`sample/` 目录提供了脱敏示例数据，便于快速体验：
+### 模型参数
 
-- `sample/事故/*.xlsx`：按年份划分的事故记录
-- `sample/交通策略/*.xlsx`：策略发布记录
+配置文件：`config/settings.py`
 
-使用前建议复制到临时位置再进行编辑。
+```python
+# ARIMA 参数搜索范围
+ARIMA_P = range(0, 4)
+ARIMA_D = range(0, 2)
+ARIMA_Q = range(0, 4)
 
-## 输入输出格式
+# 预测与评估
+DEFAULT_HORIZON_PREDICT = 30  # 默认预测天数
+DEFAULT_HORIZON_EVAL = 14     # 默认评估窗口
+MIN_PRE_DAYS = 5              # 最小历史数据天数
+MAX_PRE_DAYS = 120            # 最大历史数据天数
 
-### 输入
-- **事故数据 Excel**：需包含 `事故时间`、`所在街道`、`事故类型` 列
-- **策略数据 Excel**：需包含 `发布时间`、`交通策略类型` 列
+# 异常检测
+ANOMALY_N_ESTIMATORS = 50     # Isolation Forest 估计器数量
+ANOMALY_CONTAMINATION = 0.10  # 预期异常比例
+```
 
-### 输出
-- **预测结果**：CSV 文件（例如 `arima_forecast.csv`）
-- **图表**：HTML 文件（例如 `overview_series.html`）
-- **策略推荐**：文本文件（`recommendation.txt`）
+## 常见问题
 
-## 调用示例
+| 问题 | 解决方案 |
+|------|----------|
+| `ModuleNotFoundError` | 运行 `pip install -r requirements.txt` |
+| 数据加载失败 | 检查 Excel 文件格式，确保包含必需列名 |
+| 预测图表未显示 | 确保干预日期前至少有 10 条历史数据 |
+| AI 分析无响应 | 检查 API Key 有效性及网络连接 |
+| 热点分析提示无数据 | 先上传事故数据并点击"应用数据与筛选" |
 
-运行 Streamlit 应用：
+## 更新日志
+
+参见 [CHANGELOG.md](CHANGELOG.md)
+
+**当前版本**：v1.1.0
+
+### v1.1.0 主要更新
+
+- 集成 DeepSeek AI 分析功能（流式输出）
+- 新增事故热点分析模块
+- 优化预测模型性能
+- 支持 Docker 容器化部署
+- 改进数据可视化交互体验
+- 修复多标签页导航状态问题
+
+## 升级指南
+
 ```bash
+# 备份现有数据
+cp -r data data_backup
+
+# 拉取最新代码
+git pull origin main
+
+# 更新依赖
+pip install -r requirements.txt --upgrade
+
+# 重启应用
 streamlit run app.py
 ```
 
-访问 http://localhost:8501，上传数据文件并交互分析。
-
-## 常见问题排查
-
-**问题**：`ModuleNotFoundError: No module named 'streamlit'`  
-**解决**：运行 `pip install -r requirements.txt` 或检查 Python 环境
-
-**问题**：数据加载失败  
-**解决**：确保 Excel 文件格式正确，检查列名是否匹配
-
-**问题**：预测模型页面点击后图表未显示  
-**解决**：确认干预日期之前至少有 10 条历史记录，或缩短预测天数重新提交
-
-**问题**：热点分析提示“请上传事故数据”  
-**解决**：侧边栏上传事故数据后点击“应用数据与筛选”，热点模块会复用相同数据集
-
-## 日志分析
-
-- **日志文件**：`logs/app.log`（需在代码中配置 logging 模块）
-- **查看日志**：`tail -f logs/app.log`
-- **常见错误**：
-  - `ValueError`：检查输入数据格式
-  - `ConnectionError`：验证网络连接或文件路径
-
-## 升级说明
-
-- **当前版本**：v1.0.0
-- **升级步骤**：
-  1. 备份数据和配置文件
-  2. 拉取最新代码：`git pull origin main`
-  3. 更新依赖：`pip install -r requirements.txt --upgrade`
-  4. 重启应用：`streamlit run app.py`
-
-参考 `CHANGELOG.md` 查看版本变更详情。
-
 ## 许可证
 
-MIT License - 详见 LICENSE 文件。
+MIT License - 详见 [LICENSE](LICENSE)
 
-[![GitHub license](https://img.shields.io/github/license/tongnian0613/repo)](https://github.com/tongnian0613/TrafficSafeAnalyzer/LICENSE)
-[![Build Status](https://img.shields.io/travis/username/repo)](https://travis-ci.org/tongnian0613/repo)
+## 贡献
+
+欢迎提交 Issue 和 Pull Request。
+
+---
+
+[![GitHub license](https://img.shields.io/github/license/tongnian0613/TrafficSafeAnalyzer)](https://github.com/tongnian0613/TrafficSafeAnalyzer/blob/main/LICENSE)
